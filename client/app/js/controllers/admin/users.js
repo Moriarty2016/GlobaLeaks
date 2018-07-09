@@ -4,6 +4,8 @@ GLClient.controller('AdminUsersCtrl', ['$scope',
     $scope.toggleAddUser = function() {
       $scope.showAddUser = !$scope.showAddUser;
     };
+
+    $scope.tenants_by_id = $scope.Utils.array_to_map($scope.admin.tenants);
 }]).controller('AdminUserEditorCtrl', ['$scope', '$rootScope', '$http', 'Utils', 'AdminUserResource',
   function($scope, $rootScope, $http, Utils, AdminUserResource) {
     $scope.deleteUser = function() {
@@ -16,6 +18,11 @@ GLClient.controller('AdminUsersCtrl', ['$scope',
 
     $scope.toggleEditing = function () {
       $scope.editing = $scope.editing ^ 1;
+    };
+
+    $scope.showAddUserTenantAssociation = false;
+    $scope.toggleAddUserTenantAssociation = function () {
+      $scope.showAddUserTenantAssociation = !$scope.showAddUserTenantAssociation;
     };
 
     $scope.saveUser = function() {
@@ -56,6 +63,81 @@ GLClient.controller('AdminUsersCtrl', ['$scope',
         $rootScope.successes.push({message: 'Success!'});
       })
     }  
+}]).
+controller('AdminUserTenantAssociationAddCtrl', ['$scope', '$http', '$filter',
+function ($scope, $http, $filter) {
+  $scope.refreshAvailableTenants = function(filter) {)
+    var tenantList = [];
+
+    /* Build a list of tenants that we can actually add */
+    for (var i = 0; i < $scope.admin.tenants.length; i++) {
+      var tenant = $scope.admin.tenants[i];
+
+      /* If user.tid matches, it's not an elligable choice */
+      if ($scope.user.tid === tenant.id) {
+        continue;
+      }
+
+      /* Same if user is already associated */
+      var already_associated = false;
+      for (var j = 0; j < $scope.user.usertenant_assocations.length; j++) {
+        var t_assoc = $scope.user.usertenant_assocations[j]
+        if (t_assoc.tenant_id === tenant.id) {
+          already_associated = true;
+          break;
+        }
+      }
+
+      if (already_associated === true) {
+        continue;
+      }
+
+      // *phew*, we can add it to the list
+      tenantList.push(tenant);
+    }
+
+    if (filter) {
+      tenantList = $filter('filter')(tenantList, filter);
+    }
+
+    $scope.availableTenants = tenantList;
+  }
+
+  $scope.refreshAvailableTenants();
+
+  $scope.addUserTenantAssociation = function (tenant) {
+    var new_submission_substate = {
+      'tenant_id':tenant.id
+    }
+
+    $http.post(
+      '/admin/users/' + $scope.user.id + '/tenant_associations',
+      new_submission_substate
+    ).then(function (result) {
+      $scope.user.usertenant_assocations.push(result.data);
+    })
+  }
+}]).
+controller('AdminUserTenantAssociationEditorCtrl', ['$scope', '$rootScope', '$http', 'Utils', 'AdminUserTenantAssociationResource',
+function ($scope, $rootScope, $http, Utils, AdminUserTenantAssociationResource) {
+  $scope.usertenant_association_editing = false;
+  $scope.toggleUserTenantAssociationEditing = function () {
+    $scope.usertenant_association_editing = !$scope.usertenant_association_editing;
+  }
+
+  $scope.deleteUserTenantAssociation = function() {
+    Utils.deleteDialog($scope.association).then(function() {
+      AdminUserTenantAssociationResource.delete({
+        user_id: $scope.user.id,
+        tenant_id: $scope.association.tenant_id
+      }, function() {
+        var index = $scope.user.usertenant_assocations.indexOf($scope.association);
+        $scope.user.usertenant_assocations.splice(index, 1);
+        $scope.refreshAvailableTenants();
+      });
+    });
+  }
+
 }]).
 controller('AdminUserAddCtrl', ['$scope',
   function($scope) {

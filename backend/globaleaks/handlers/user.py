@@ -45,6 +45,7 @@ def user_serialize_user(session, user, language):
     :return: a serialization of the object
     """
     picture = db_get_model_img(session, 'users', user.id)
+    user_tenants = db_get_usertenant_associations(session, user)
 
     ret_dict = {
         'id': user.id,
@@ -67,10 +68,20 @@ def user_serialize_user(session, user, language):
         'pgp_key_expiration': datetime_to_ISO8601(user.pgp_key_expiration),
         'pgp_key_remove': False,
         'picture': picture,
-        'can_edit_general_settings': user.can_edit_general_settings
+        'can_edit_general_settings': user.can_edit_general_settings,
+        'tid': user.tid,
+        'usertenant_assocations': user_tenants
     }
 
     return get_localized_values(ret_dict, user, user.localized_keys, language)
+
+
+def serialize_usertenant_association(row):
+    '''Serializes the UserTenant associations'''
+    return {
+        'user_id': row.user_id,
+        'tenant_id': row.tenant_id
+    }
 
 
 @transact
@@ -145,6 +156,18 @@ def update_user_settings(session, state, tid, user_id, request, language):
     user = db_user_update_user(session, state, tid, user_id, request)
 
     return user_serialize_user(session, user, language)
+
+
+
+def db_get_usertenant_associations(session, user):
+    usertenants = session.query(models.UserTenant) \
+                         .filter(models.UserTenant.user_id == user.id)
+
+    ret = [serialize_usertenant_association(usertenant) for usertenant in usertenants]
+
+    ret.append({'user_id': user.id, 'tenant_id': user.tid})
+
+    return ret
 
 
 class UserInstance(BaseHandler):

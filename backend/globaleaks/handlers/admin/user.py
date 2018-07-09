@@ -9,13 +9,17 @@ from six import text_type
 from globaleaks import models
 from globaleaks.db import db_refresh_memory_variables
 from globaleaks.handlers.base import BaseHandler
-from globaleaks.handlers.user import parse_pgp_options, user_serialize_user
+from globaleaks.handlers.user import parse_pgp_options, \
+                                     user_serialize_user, \
+                                     serialize_usertenant_association
+
 from globaleaks.orm import transact
 from globaleaks.rest import requests, errors
 from globaleaks.state import State
 from globaleaks.utils import security
 from globaleaks.utils.structures import fill_localized_keys, get_localized_values
 from globaleaks.utils.utility import datetime_now
+
 
 def admin_serialize_receiver(session, receiver, user, language):
     """
@@ -220,3 +224,34 @@ class UserInstance(BaseHandler):
         Delete the specified user.
         """
         return models.delete(models.User, models.User.tid == self.request.tid, models.User.id == user_id)
+
+
+@transact
+def create_usertenant_association(session, user_id, tenant_id):
+    usertenant = models.UserTenant()
+    usertenant.user_id = user_id
+    usertenant.tenant_id = tenant_id
+    session.add(usertenant)
+    return serialize_usertenant_association(usertenant)
+
+
+class UserTenantCollection(BaseHandler):
+    check_roles = 'admin'
+    invalidate_cache = True
+    root_tenant_only = True
+
+    def post(self, user_id):
+        """Creates a list of user/tenant associations"""
+        request = self.validate_message(self.request.content.read(), requests.UserTenantDesc)
+        return create_usertenant_association(user_id, request['tenant_id'])
+
+
+class UserTenantInstance(BaseHandler):
+    check_role = 'admin'
+    invalidate_cache = True
+    root_tenant_only = True
+
+    def delete(self, user_id, tenant_id):
+        return models.delete(models.UserTenant,
+                             models.UserTenant.user_id == user_id,
+                             models.UserTenant.tenant_id == tenant_id)
